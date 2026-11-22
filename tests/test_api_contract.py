@@ -1,10 +1,10 @@
-"""Contract tests against the live Open Food Facts API.
+"""Contract tests against the live API.
 
-Marked `live` and excluded from the default run: they need the network, so
-they can fail for reasons that have nothing to do with this code. They answer
-a question the offline suite cannot — "does the real API still behave the way
-the pipeline assumes?" — and CI runs them on a schedule, where a failure means
-upstream changed rather than that someone broke the build.
+Marked `live` and excluded by default, since they need the network and can
+fail for reasons that have nothing to do with this code. They answer the one
+question the offline suite can't, which is whether the real API still behaves
+the way the pipeline assumes. CI runs them on a schedule, where a failure
+means upstream changed rather than that someone broke the build.
 
     pytest -m live
 """
@@ -18,8 +18,8 @@ from foodgraph.ingest import normalise
 
 pytestmark = pytest.mark.live
 
-# Nutella. One of the most-edited records in the database, so it is about as
-# stable a fixture as a crowd-sourced dataset offers.
+# Nutella. One of the most-edited records in the database, so about as stable
+# a fixture as a crowd-sourced dataset gets.
 KNOWN_BARCODE = "3017620422003"
 
 

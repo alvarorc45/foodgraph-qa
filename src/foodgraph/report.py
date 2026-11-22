@@ -1,9 +1,8 @@
-"""Render check results.
+"""Render check results as console text, markdown or HTML.
 
-The same results that pytest asserts on are what gets rendered here. That is
-the point of the single `CheckResult` shape: the monitoring and the test suite
-cannot disagree about whether the data is healthy, because they are reading
-the same rule.
+Same results pytest asserts on, which is the point of the single
+`CheckResult` shape - the monitoring and the suite can't disagree about
+whether the data is healthy.
 """
 
 from __future__ import annotations
@@ -23,9 +22,8 @@ def run_all(conn: sqlite3.Connection, checks: Iterable[Check] = ALL_CHECKS) -> l
         try:
             results.append(check.run(conn))
         except sqlite3.Error as exc:
-            # A check that crashes is a failure, not an absence. Swallowing it
-            # would turn a broken validator into a silent green tick, which is
-            # the worst outcome a monitoring system can produce.
+            # A check that crashes is a failure, not an absence. Swallow it
+            # and a broken validator becomes a silent green tick.
             results.append(
                 CheckResult(
                     name=check.name,
@@ -42,10 +40,9 @@ def run_all(conn: sqlite3.Connection, checks: Iterable[Check] = ALL_CHECKS) -> l
 def exit_code(results: list[CheckResult]) -> int:
     """Non-zero when an ERROR-severity check failed.
 
-    Warnings deliberately do not break the build. On crowd-sourced data there
-    is always a tail of implausible records, and a pipeline that goes red
-    every morning for something nobody can fix is a pipeline whose alerts get
-    ignored within a week.
+    Warnings don't break the build on purpose. Crowd-sourced data always has
+    a tail of implausible records, and a pipeline that goes red every morning
+    over something nobody can fix gets ignored within a week.
     """
     return 1 if any(
         not r.passed and r.severity is Severity.ERROR for r in results
@@ -53,10 +50,9 @@ def exit_code(results: list[CheckResult]) -> int:
 
 
 def _state(result: CheckResult) -> str:
-    """The word a reader sees. `allow` is not the same as `pass`.
-
-    A check that found eight broken rows and shrugged has not passed in any
-    sense a reader would recognise, so it does not get to borrow the word.
+    """The word a reader sees. A rule that found eight broken rows and
+    shrugged hasn't passed in any sense a reader would recognise, so it
+    doesn't get to borrow the word.
     """
     if not result.passed:
         return result.severity.value
@@ -114,10 +110,9 @@ def to_markdown(results: list[CheckResult], *, title: str = "Data quality report
             "",
             "## Tolerated",
             "",
-            "Rules that found broken rows but not enough of them to fail. These "
-            "did not break the build and they are not noise either: the rows "
-            "below are real. A report that folded them in with the clean "
-            "results would be hiding its own findings.",
+            "Rules that found broken rows but not enough of them to fail. "
+            "They didn't break the build and they aren't noise either - the "
+            "rows below are real.",
             "",
         ]
         for result in tolerated:

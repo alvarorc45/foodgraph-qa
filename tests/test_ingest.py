@@ -15,18 +15,46 @@ from foodgraph.ingest import _clean_tag, _energy_kcal, _number, normalise
 @pytest.mark.parametrize(
     "tag, expected",
     [
-        ("en:breakfast-cereals", ("breakfast-cereals", "breakfast cereals")),
-        # Language prefixes differ while the concept does not; keeping the
-        # prefix would create one node per language.
-        ("fr:cereales", ("cereales", "cereales")),
-        ("no-prefix", ("no-prefix", "no prefix")),
-        ("  en:Sugar  ", ("sugar", "sugar")),
+        ("en:breakfast-cereals", ("breakfast-cereals", "breakfast cereals", "en")),
+        # The prefix is a property of the tag, not of the thing, so it stays
+        # out of the id — but it is kept, because it records whether the
+        # source resolved this entity or passed raw text through.
+        ("fr:cereales", ("cereales", "cereales", "fr")),
+        ("no-prefix", ("no-prefix", "no prefix", None)),
+        ("  en:Sugar  ", ("sugar", "sugar", "en")),
+        # Not a language code: swallowing the left half would rename the node.
+        ("vitamin b:12", ("vitamin-b-12", "vitamin b 12", None)),
         ("en:", None),
         ("", None),
     ],
 )
 def test_tag_parsing(tag, expected) -> None:
     assert _clean_tag(tag) == expected
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "es:HIDROLIZADO DE LEVADURA",
+        "es:hidrolizado-de-levadura",
+        "es:Hidrolizado_De_Levadura",
+        "es:  hidrolizado   de  levadura  ",
+    ],
+)
+def test_separator_variants_collapse_to_one_id(tag: str) -> None:
+    """Regression test built from a real pair found in live data.
+
+    Products 7501011111028 and 7501011127012 declared the same substance as
+    `HIDROLIZADO DE LEVADURA` and `hidrolizado-de-levadura`. Keyed on the raw
+    slug the loader made two nodes and split that ingredient's edges between
+    them. Nothing errored and every aggregate over it was quietly halved.
+
+    duplicate_nodes caught it in 6 of 7 slices. The check was right and the
+    loader was wrong.
+    """
+    assert _clean_tag(tag) == (
+        "hidrolizado-de-levadura", "hidrolizado de levadura", "es",
+    )
 
 
 @pytest.mark.parametrize(

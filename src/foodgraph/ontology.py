@@ -1,9 +1,7 @@
-"""The ontology: which relationships are allowed, and between what.
+"""What relationships are allowed, and between what.
 
-Keeping this as data rather than scattering it through the loader means the
-integrity checks can be derived from it. A new relationship type is declared in
-one place and the validator picks it up automatically, instead of the rules
-drifting away from the loader one commit at a time.
+Kept as data so the integrity checks can be derived from it instead of each
+rule hardcoding its own idea of the model.
 """
 
 from __future__ import annotations
@@ -20,10 +18,8 @@ NODE_LABELS: Final[frozenset[str]] = frozenset(
     {PRODUCT, BRAND, CATEGORY, INGREDIENT, ADDITIVE}
 )
 
-#: Relationship name -> (allowed source label, allowed destination label).
-#: An edge whose endpoints do not match its declared types is a defect even
-#: when both nodes exist, which is the "wrong relationship type" case the
-#: integrity suite looks for.
+# rel -> (source label, destination label). An edge whose endpoints don't
+# match its declared types is a defect even when both nodes exist.
 RELATIONSHIPS: Final[dict[str, tuple[str, str]]] = {
     "HAS_BRAND": (PRODUCT, BRAND),
     "IN_CATEGORY": (PRODUCT, CATEGORY),
@@ -31,16 +27,14 @@ RELATIONSHIPS: Final[dict[str, tuple[str, str]]] = {
     "CONTAINS_ADDITIVE": (PRODUCT, ADDITIVE),
 }
 
-#: Relationships every product is expected to have. Missing ones are reported
-#: as incompleteness rather than as a hard error: Open Food Facts is
-#: crowd-sourced and partial records are normal, but a sudden jump in how many
-#: products lack a category is exactly the signal worth alerting on.
+# Relationships every product ought to have. Missing ones are incompleteness,
+# not a hard error - partial records are normal in crowd-sourced data. A jump
+# in how many products lack a category is the thing worth alerting on.
 EXPECTED_PRODUCT_RELATIONSHIPS: Final[tuple[str, ...]] = (
     "IN_CATEGORY",
     "HAS_BRAND",
 )
 
-#: Table that stores each node label.
 NODE_TABLES: Final[dict[str, str]] = {
     PRODUCT: "product",
     BRAND: "brand",
@@ -49,7 +43,6 @@ NODE_TABLES: Final[dict[str, str]] = {
     ADDITIVE: "additive",
 }
 
-#: Primary-key column for each node label.
 NODE_KEYS: Final[dict[str, str]] = {
     PRODUCT: "code",
     BRAND: "id",

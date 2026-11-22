@@ -1,8 +1,7 @@
-"""All checks, in one registry.
+"""One registry for every check.
 
-The registry is what lets pytest parametrise over every rule and the report
-render every rule without either of them keeping its own list that can fall
-out of date.
+Lets pytest parametrise over all the rules and the report render all of
+them without either keeping its own list that falls out of date.
 """
 
 from __future__ import annotations

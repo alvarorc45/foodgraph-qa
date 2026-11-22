@@ -1,13 +1,12 @@
 """Does the pipeline survive payloads the API really sent?
 
-Optional by design: the file only exists once someone runs
-`scripts/record_fixtures.py`, and the suite must stay green on a fresh clone.
+Optional by design. The file only exists once someone runs
+scripts/record_fixtures.py, and a fresh clone has to stay green.
 
-The assertions here are deliberately about *parsing and loading*, never about
-the data being clean. Real Open Food Facts records contain genuine defects —
-that is the entire premise of this project — so asserting they pass the
-quality checks would be asserting that the thing we built to find problems
-finds none.
+Everything here asserts on parsing and loading, never on the data being
+clean. Real OFF records contain real defects - that's the premise of the
+project - so asserting they pass the quality checks would amount to
+asserting the harness finds nothing.
 """
 
 from __future__ import annotations
@@ -51,11 +50,11 @@ def test_recorded_sample_loads_without_crashing(db) -> None:
 
 
 def test_every_check_runs_against_real_data(db) -> None:
-    """Checks must survive real data, pass or fail.
+    """Checks have to survive real data, pass or fail.
 
-    This asserts they *execute* and report, not that they pass. A check that
-    throws on a null nobody anticipated is broken; a check that fails on a
-    genuinely bad record is working.
+    Asserts they execute and report, not that they pass. A check that throws
+    on a null nobody anticipated is broken. One that fails on a genuinely bad
+    record is working.
     """
     ingest.load(db, _load_sample(), source="recorded")
     results = run_all(db)

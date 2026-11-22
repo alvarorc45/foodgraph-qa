@@ -1,13 +1,12 @@
-"""The fixtures themselves are an input worth validating.
+"""The fixtures are an input, and inputs get validated.
 
-Several tests only mean something if the data underneath them has certain
-properties: you cannot prove that a shared ingredient becomes one node if no
-ingredient is shared. Without this file, shrinking the fixture set does not
-produce an error, it produces tests that still pass while checking nothing —
-which is far worse than a red build.
+Several tests only mean anything if the data underneath has certain
+properties. You can't prove a shared ingredient becomes one node when no
+ingredient is shared. Without this file, shrinking the fixture set doesn't
+produce an error - it produces tests that still pass while checking nothing,
+which is worse than a red build.
 
-So the contract is explicit and checked. If it fails, the fixtures need
-fixing, not the tests.
+If something here fails, fix the fixtures, not the tests.
 """
 
 from __future__ import annotations
@@ -37,11 +36,8 @@ def test_every_payload_has_the_contracted_fields(clean_payloads: list[dict[str, 
 
 
 def test_some_ingredient_is_shared(clean_db: sqlite3.Connection) -> None:
-    """At least one ingredient must appear in two products.
-
-    This is what makes the data a graph rather than a list. Without overlap,
-    `test_shared_entities_are_one_node_not_many` has nothing to assert on.
-    """
+    """At least one ingredient has to appear in two products, or
+    test_shared_entities_are_one_node_not_many has nothing to assert on."""
     row = clean_db.execute(
         """
         SELECT dst_id, COUNT(DISTINCT src_id) AS products
@@ -73,11 +69,10 @@ def test_some_product_has_complete_macros(clean_db: sqlite3.Connection) -> None:
 
 
 def test_the_curated_fixture_is_clean_by_construction(clean_db: sqlite3.Connection) -> None:
-    """This set exists to answer "does a good load pass?", so it must be good.
-
-    Real recorded data belongs in `recorded_sample.json`, where finding
-    defects is the point. Mixing the two would mean a red suite every time
-    Open Food Facts gained a bad record, which is not a signal about this code.
+    """This set exists to answer "does a good load pass?", so it has to be
+    good. Real recorded data belongs in recorded_sample.json, where finding
+    defects is the point. Mix them and the suite goes red every time OFF
+    gains a bad record, which says nothing about this code.
     """
     from foodgraph.checks import ALL_CHECKS
 

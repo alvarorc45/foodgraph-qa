@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 """Sweep several slices of the dataset and report where the defects are.
 
-`run_checks.py` validates one pull and gates on it. This is the other job:
-surveying a lot of the dataset to find out *where* the bad data lives, which
-is a question one pull cannot answer.
+`run_checks.py` validates one pull and gates on it. This does the other job,
+surveying enough of the dataset to find out *where* the bad data lives.
 
-The distinction matters more than it looks. Popular products are the
-best-curated ones, so a sweep of "chocolate" comes back clean and proves
-nothing except that the community looks after its flagship records. Defects
-concentrate in the quiet corners — niche categories, local brands, products
-whose nutrition was typed in once and never revisited.
+Worth keeping separate. Popular products are the best-curated ones, so a
+sweep of "chocolate" comes back clean and proves nothing except that the
+community looks after its flagship records. The defects sit in the quiet
+corners - niche categories, local brands, nutrition typed in once in 2018
+and never revisited.
 
     python scripts/hunt.py
     python scripts/hunt.py --terms aceite "especias" "suplemento proteina"
     python scripts/hunt.py -n 100 --out reports/hunt
 
-Always exits 0: a survey that failed because it found what it was looking for
-would be a strange thing to put in a pipeline. Use `run_checks.py` to gate.
+Always exits 0. A survey that fails because it found what it was looking for
+would be an odd thing to put in a pipeline; use run_checks.py to gate.
 """
 
 from __future__ import annotations
@@ -34,10 +33,10 @@ from foodgraph import ingest, report  # noqa: E402
 from foodgraph.checks.base import CheckResult, Severity  # noqa: E402
 from foodgraph.client import OffClient, OffError  # noqa: E402
 
-#: Starting points, not a definitive list. Weighted towards categories where
-#: portion sizes, units and hand-typed labels tend to go wrong: supplements
-#: declare energy per scoop, spices per 100 g of something nobody eats 100 g
-#: of, and oils sit right at the physical limit of what food can contain.
+# Starting points, not a definitive list. Weighted towards categories where
+# portion sizes and hand-typed labels tend to go wrong - supplements declare
+# energy per scoop, oils sit right at the physical limit of what food can
+# contain.
 DEFAULT_TERMS = (
     "aceite",
     "especias",
@@ -51,12 +50,8 @@ DEFAULT_TERMS = (
 
 
 class SearchClient(Protocol):
-    """Only the one method the sweep needs.
-
-    Narrow on purpose: it is what lets the tests drive this with a stub
-    instead of the live API, which is the difference between a sweep that is
-    tested and one that is merely run.
-    """
+    """Only the method the sweep needs, so tests can drive it with a stub
+    instead of the live API."""
 
     def search(self, term: str, page_size: int = ...) -> list[dict]: ...
 
@@ -98,12 +93,8 @@ class Outcome:
 
     @property
     def findings(self) -> int:
-        """Rules that had something to say, tolerated ones included.
-
-        Tolerated counts here. A rule that found eight broken rows and let
-        them through has still found eight broken rows, and those rows are
-        the point of the exercise.
-        """
+        # Tolerated counts. A rule that found eight broken rows and let them
+        # through has still found eight broken rows.
         return len(self.errors) + len(self.warns) + len(self.tolerated)
 
 
@@ -115,9 +106,8 @@ def sweep(
     out: Path,
     work_dir: Path,
 ) -> list[Outcome]:
-    # Own the directories rather than trusting the caller to have made them:
-    # a sweep that only works when called from `main` is a sweep the tests
-    # cannot drive, which is how this function would stop being tested.
+    # Make our own directories instead of trusting the caller. A sweep that
+    # only works when called from main() is one the tests can't drive.
     work_dir.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -127,8 +117,8 @@ def sweep(
         try:
             payloads = client.search(term, page_size=limit)
         except OffError as exc:
-            # One bad slice must not end the sweep. Upstream 5xx is common
-            # enough that aborting would mean never finishing a run.
+            # One bad slice mustn't end the sweep - 5xx from this endpoint is
+            # common enough that aborting means never finishing a run.
             print(f"  skipped: {exc}")
             outcomes.append(Outcome(term, error=str(exc)))
             continue
@@ -193,6 +183,65 @@ def league_table(outcomes: list[Outcome]) -> str:
     return "\n".join(lines)
 
 
+# Rows per rule per term in the consolidated file. The per-term reports keep
+# the full set; this one exists to be read in one sitting.
+CONSOLIDATED_SAMPLES = 3
+
+
+def consolidated(outcomes: list[Outcome]) -> str:
+    """Every rule that fired anywhere, grouped by rule rather than by term.
+
+    The per-term reports tell you how healthy one slice is. This tells you
+    what's wrong with the dataset and how often, which is the question you
+    actually have once a sweep finishes. The same rule firing in six slices
+    is one finding with six examples, and only this view shows that.
+    """
+    by_rule: dict[str, list[tuple[str, CheckResult]]] = {}
+    for outcome in outcomes:
+        for result in outcome.errors + outcome.warns + outcome.tolerated:
+            by_rule.setdefault(result.name, []).append((outcome.term, result))
+
+    unreachable = [o.term for o in outcomes if o.error]
+    lines = ["# Findings across the sweep", ""]
+    if unreachable:
+        lines += [f"_Not swept (upstream unreachable): {', '.join(unreachable)}_", ""]
+    if not by_rule:
+        lines += ["Nothing fired in any slice."]
+        return "\n".join(lines) + "\n"
+
+    def rank(item: tuple[str, list[tuple[str, CheckResult]]]) -> tuple[int, int]:
+        _, hits = item
+        worst = 0 if any(not r.passed and r.severity is Severity.ERROR
+                         for _, r in hits) else 1 if any(not r.passed for _, r in hits) else 2
+        return worst, -sum(r.offenders for _, r in hits)
+
+    for rule, hits in sorted(by_rule.items(), key=rank):
+        total = sum(r.offenders for _, r in hits)
+        lines += [
+            f"## `{rule}`",
+            "",
+            hits[0][1].description,
+            "",
+            f"Fired in {len(hits)} slice(s), {total} offending row(s) in total.",
+            "",
+        ]
+        for term, result in hits:
+            state = ("tolerated" if result.tolerated
+                     else result.severity.value.upper())
+            lines += [f"**{term}** — {result.offenders}/{result.examined} ({state})", ""]
+            if not result.samples:
+                lines += ["_no rows reported_", ""]
+                continue
+            keys = list(result.samples[0].keys())
+            lines.append("| " + " | ".join(keys) + " |")
+            lines.append("| " + " | ".join("---" for _ in keys) + " |")
+            for sample in result.samples[:CONSOLIDATED_SAMPLES]:
+                lines.append("| " + " | ".join(
+                    str(sample.get(k, "")).replace("|", "\\|") for k in keys) + " |")
+            lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -210,7 +259,11 @@ def main() -> int:
 
     outcomes = sweep(OffClient(), args.terms, limit=args.limit, out=out, work_dir=work_dir)
     print(league_table(outcomes))
-    print(f"\nPer-term reports under {out}/")
+
+    findings = out / "FINDINGS.md"
+    findings.write_text(consolidated(outcomes), encoding="utf-8")
+    print(f"\nEverything that fired, grouped by rule: {findings}")
+    print(f"Per-term detail under {out}/")
     return 0
 
 

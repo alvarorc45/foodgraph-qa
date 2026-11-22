@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Record real API responses into tests/fixtures/recorded_sample.json.
 
-This does NOT touch `products.json`. The two fixture files answer different
-questions and must not be mixed:
+Does NOT touch products.json. The two files answer different questions and
+mixing them breaks both.
 
-  products.json        curated, clean by construction. Answers "does a good
-                       load pass every check?". If real-world data went in
-                       here, the suite would go red whenever Open Food Facts
-                       gained a bad record — which says nothing about this code.
+products.json is curated and clean by construction, and answers whether a
+good load passes every check. Put real-world data in there and the suite
+goes red whenever OFF gains a bad record, which says nothing about this code.
 
-  recorded_sample.json real payloads, warts and all. Answers "does the parser
-                       survive what the API actually sends?". Optional: the
-                       suite skips its tests when the file is absent.
+recorded_sample.json is real payloads, warts and all, and answers whether the
+parser survives what the API actually sends. Optional - its tests skip when
+the file isn't there.
 
     python scripts/record_fixtures.py --search chocolate -n 10
     python scripts/record_fixtures.py --barcodes 3017620422003 ...
@@ -37,8 +36,8 @@ def _record_barcodes(client: OffClient, codes: list[str]) -> list[dict]:
     for code in codes:
         product = client.product(code)
         if product is None:
-            # Loudly, because a silently skipped barcode is how you end up
-            # writing a one-product fixture and wondering why tests broke.
+            # Loudly. A silently skipped barcode is how you end up with a
+            # one-product fixture wondering why half the suite broke.
             print(f"  NOT FOUND {code} — skipped")
             continue
         payloads.append(product)
@@ -59,10 +58,10 @@ def main() -> int:
 
     client = OffClient()
 
-    # An upstream outage is not a crash in this script, so it does not get to
-    # look like one. `cgi/search.pl` is the legacy Open Food Facts endpoint and
-    # returns 503 under load often enough that a stack trace here would train
-    # whoever is reading it to distrust real tracebacks.
+    # An upstream outage isn't a crash in this script and shouldn't look
+    # like one. cgi/search.pl is the legacy endpoint and 503s under load
+    # often enough that a stack trace here teaches people to ignore real
+    # tracebacks.
     try:
         if args.search:
             payloads = client.search(args.search, page_size=args.limit)

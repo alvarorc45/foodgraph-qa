@@ -1,13 +1,14 @@
-"""Turn API payloads into graph nodes and edges, and load them into SQLite.
+"""Payloads in, nodes and edges out, then into SQLite.
 
-The normalising half is kept free of I/O so it can be unit-tested against
-recorded payloads without a database or a network, which is what makes the
-offline suite fast and deterministic.
+The normalising half stays free of I/O so it can be tested against recorded
+payloads with no database and no network. That's what keeps the offline
+suite fast and deterministic.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 from dataclasses import dataclass, field
@@ -24,6 +25,9 @@ class Node:
     label: str
     id: str
     name: str
+    # Language prefix the tag arrived with, if any. Kept because it says
+    # whether the source resolved this entity or gave up on it.
+    lang: str | None = None
 
 
 @dataclass(slots=True)
@@ -51,34 +55,45 @@ class ProductRecord:
     edges: list[Edge] = field(default_factory=list)
 
 
-# --------------------------------------------------------------- normalising
+def _clean_tag(tag: str) -> tuple[str, str, str | None] | None:
+    """Tag -> (id, display name, language).
 
-def _clean_tag(tag: str) -> tuple[str, str] | None:
-    """Split an Open Food Facts tag into (id, display name).
+    Tags come language-prefixed, `en:breakfast-cereals` or `fr:cereales`.
+    The prefix stays out of the id, since it's a property of the tag rather
+    than of the thing, but it's kept as `lang`.
 
-    Tags arrive language-prefixed, like ``en:breakfast-cereals`` or
-    ``fr:cereales``. The prefix is dropped for the id so the same concept
-    tagged in two languages does not become two nodes, and the slug is turned
-    back into something readable for the name.
+    Canonicalising the separators is the part that used to be missing. OFF
+    sends the taxonomy slug for ingredients it recognises and raw
+    contributor text for the ones it doesn't, so the same substance turned up
+    as both `es:HIDROLIZADO DE LEVADURA` and `es:hidrolizado-de-levadura`.
+    Keyed on the raw slug that's two nodes for one thing with its edges split
+    between them. Lowercasing wasn't enough; whitespace and underscores have
+    to collapse too. See docs/bug-reports/004.
     """
     tag = tag.strip()
     if not tag:
         return None
-    slug = tag.split(":", 1)[1] if ":" in tag else tag
-    slug = slug.strip().lower()
+
+    lang: str | None = None
+    if ":" in tag:
+        prefix, rest = tag.split(":", 1)
+        # Only a short alphabetic prefix is a language code. Treat anything
+        # else as part of the name, or `vitamin b:12` becomes `12`.
+        if prefix.isalpha() and len(prefix) <= 3:
+            lang, tag = prefix.lower(), rest
+
+    slug = re.sub(r"[\s_:-]+", "-", tag.strip().lower()).strip("-")
     if not slug:
         return None
-    name = slug.replace("-", " ").replace("_", " ").strip()
-    return slug, name
+    return slug, slug.replace("-", " "), lang
 
 
 def _number(value: Any) -> float | None:
-    """Coerce an API value to a float, or None.
+    """Coerce an API value to float, or None.
 
-    Open Food Facts stores numbers as strings often enough that assuming float
-    is a reliable way to lose data, and it also uses the empty string for
-    "unknown". Booleans are rejected because ``float(True)`` is 1.0, which
-    would quietly invent a nutrient value.
+    OFF stores numbers as strings often enough that assuming float loses
+    data, and uses the empty string for unknown. Booleans are rejected
+    because float(True) is 1.0, which would invent a nutrient value.
     """
     if value is None or isinstance(value, bool):
         return None
@@ -107,11 +122,10 @@ def _energy_kcal(nutriments: dict[str, Any]) -> float | None:
 
 
 def normalise(payload: dict[str, Any]) -> ProductRecord | None:
-    """Build a ProductRecord from one API product payload.
+    """Build a ProductRecord from one payload, or None if it has no barcode.
 
-    Returns None when the payload has no barcode: without an identity there is
-    nothing to attach edges to, and loading it would create a node that no
-    check could ever trace back to a source.
+    Without an identity there's nothing to hang edges off, and loading it
+    anyway would create a node no check could trace back to a source.
     """
     code = str(payload.get("code") or "").strip()
     if not code:
@@ -150,16 +164,16 @@ def normalise(payload: dict[str, Any]) -> ProductRecord | None:
             parsed = _clean_tag(tag)
             if parsed is None:
                 continue
-            node_id, node_name = parsed
-            record.nodes.append(Node(label=label, id=node_id, name=node_name))
+            node_id, node_name, node_lang = parsed
+            record.nodes.append(
+                Node(label=label, id=node_id, name=node_name, lang=node_lang)
+            )
             record.edges.append(
                 Edge(onto.PRODUCT, code, rel, label, node_id)
             )
 
     return record
 
-
-# ------------------------------------------------------------------- loading
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
@@ -227,9 +241,9 @@ def load(
         for node in record.nodes:
             table = onto.NODE_TABLES[node.label]
             conn.execute(
-                f"INSERT INTO {table} (id, name) VALUES (?, ?) "
+                f"INSERT INTO {table} (id, name, lang) VALUES (?, ?, ?) "
                 f"ON CONFLICT(id) DO NOTHING",
-                (node.id, node.name),
+                (node.id, node.name, node.lang),
             )
         for edge in record.edges:
             conn.execute(

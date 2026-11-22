@@ -4,7 +4,7 @@
     python scripts/run_checks.py --from-fixtures          # offline, deterministic
     python scripts/run_checks.py --search chocolate -n 50 # live pull
 
-Exits non-zero when an ERROR-severity check fails, so it can gate a pipeline.
+Exits non-zero when an ERROR check fails, so it can gate a pipeline.
 """
 
 from __future__ import annotations

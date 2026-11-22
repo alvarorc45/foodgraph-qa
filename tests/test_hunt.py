@@ -1,9 +1,9 @@
-"""The sweep is driven by a stub client, not the live API.
+"""The sweep runs against a stub client, not the live API.
 
-A survey tool that can only be tested by pointing it at the internet is a
-tool nobody tests. `sweep` takes a client, so the whole thing runs offline in
-milliseconds and its aggregation can be asserted on against known inputs —
-including the case that matters most, a term whose pull fails midway.
+A survey tool you can only test by pointing it at the internet is a tool
+nobody tests. `sweep` takes a client, so it runs offline in milliseconds and
+the aggregation can be asserted against known inputs - including the case
+that matters, a term whose pull fails halfway through.
 """
 
 from __future__ import annotations
@@ -74,11 +74,11 @@ def test_every_term_produces_an_outcome(swept: list[hunt.Outcome]) -> None:
 
 
 def test_a_failing_term_does_not_end_the_sweep(swept: list[hunt.Outcome]) -> None:
-    """The reason this is the test worth having.
+    """The test worth having here.
 
-    Open Food Facts returns 503 often enough that a sweep which aborted on
-    the first one would never finish, and the operator would conclude the
-    dataset is clean because they never got past term three.
+    OFF returns 503 often enough that a sweep aborting on the first one would
+    never finish, and whoever ran it would conclude the dataset is clean
+    because they never got past term three.
     """
     down = swept[-1]
     assert down.error, "the unreachable term must record why"
@@ -95,9 +95,8 @@ def test_defects_are_attributed_to_the_right_term(swept: list[hunt.Outcome]) -> 
 def test_tolerated_findings_count_as_findings(tmp_path: Path) -> None:
     """A rule that absorbed broken rows still found them.
 
-    If the sweep ranked a tolerated finding as nothing, it would send whoever
-    runs it to the wrong slice of the dataset — the one where the harness
-    stayed quiet rather than the one with real rows to look at.
+    Rank a tolerated finding as nothing and the sweep sends you to the wrong
+    slice - the quiet one rather than the one with rows to look at.
     """
     class MostlyIncomplete:
         def search(self, term: str, page_size: int = 50) -> list[dict[str, Any]]:
@@ -142,3 +141,29 @@ def test_league_table_puts_the_worst_slice_first(swept: list[hunt.Outcome]) -> N
 )
 def test_slug_is_filesystem_safe(term: str, expected: str) -> None:
     assert hunt.slug(term) == expected
+
+
+def test_consolidated_groups_by_rule_not_by_term(swept: list[hunt.Outcome]) -> None:
+    """The same rule firing in six slices is one finding with six examples.
+
+    Grouped by term it reads as six problems and invites six write-ups.
+    """
+    text = hunt.consolidated(swept)
+    assert text.count("## `implausible_energy`") == 1
+    assert "**dirty**" in text
+    assert "upstream-down" in text, "an unswept term must be declared, not omitted"
+
+
+def test_consolidated_puts_errors_above_warnings(swept: list[hunt.Outcome]) -> None:
+    text = hunt.consolidated(swept)
+    assert text.index("implausible_energy") < text.index("energy_macro_consistency")
+
+
+def test_consolidated_says_so_when_nothing_fired(tmp_path: Path) -> None:
+    class Clean:
+        def search(self, term: str, page_size: int = 50) -> list[dict[str, Any]]:
+            return [payload(f"6{i:012d}") for i in range(5)]
+
+    outcomes = hunt.sweep(Clean(), ["ok"], limit=5,
+                          out=tmp_path / "o", work_dir=tmp_path / "w")
+    assert "Nothing fired in any slice." in hunt.consolidated(outcomes)

@@ -7,6 +7,7 @@ import sqlite3
 import pytest
 
 from foodgraph.checks import GRAPH_CHECKS
+from foodgraph.checks.graph import UNRESOLVED_SHARE
 from foodgraph.checks.base import Severity
 
 
@@ -19,11 +20,11 @@ def test_clean_graph_passes_every_integrity_check(check, clean_db: sqlite3.Conne
 
 @pytest.mark.graph
 def test_every_product_reaches_its_brand_and_categories(clean_db: sqlite3.Connection) -> None:
-    """A traversal, not a row count: the edges have to actually lead somewhere."""
+    """A traversal rather than a row count - the edges have to lead somewhere."""
     rows = clean_db.execute(
         """
         SELECT p.code,
-               COUNT(DISTINCT CASE WHEN e.rel = 'HAS_BRAND'   THEN e.dst_id END) AS brands,
+               COUNT(DISTINCT CASE WHEN e.rel = 'HAS_BRAND' THEN e.dst_id END) AS brands,
                COUNT(DISTINCT CASE WHEN e.rel = 'IN_CATEGORY' THEN e.dst_id END) AS categories
         FROM product p
         LEFT JOIN edge e ON e.src_type = 'product' AND e.src_id = p.code
@@ -38,11 +39,11 @@ def test_every_product_reaches_its_brand_and_categories(clean_db: sqlite3.Connec
 
 @pytest.mark.graph
 def test_shared_entities_are_one_node_not_many(clean_db: sqlite3.Connection) -> None:
-    """An ingredient used by two products must be one shared node, not two.
+    """An ingredient used by two products is one node, not two.
 
-    This is the property that makes it a graph rather than a pile of rows: if
-    the loader created one ingredient node per product, every question of the
-    form "what else contains this?" would silently return nothing.
+    The property that makes this a graph rather than a pile of rows. With one
+    ingredient node per product, "what else contains this?" returns nothing
+    and never errors.
     """
     row = clean_db.execute(
         """
@@ -76,3 +77,15 @@ def test_error_severity_checks_have_zero_tolerance(clean_db: sqlite3.Connection)
         assert result.offenders == 0, (
             f"{check.name} is an ERROR check and tolerates nothing: {result.summary()}"
         )
+
+
+@pytest.mark.graph
+def test_unresolved_share_is_a_judgement_worth_defending() -> None:
+    """The threshold is the opinion in this rule, so pin it down.
+
+    There's no published baseline for how much of a crowd-sourced vocabulary
+    fails to resolve, so the number is a judgement. Asserted anyway -
+    widening it to quieten a noisy report should need an argument, not a
+    one-line diff.
+    """
+    assert 0.02 <= UNRESOLVED_SHARE <= 0.25

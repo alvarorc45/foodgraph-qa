@@ -1,10 +1,10 @@
 """Shared fixtures.
 
-The offline suite never touches the network, so every test here is
-deterministic and runs in milliseconds. That is a deliberate split: tests that
-can fail because someone else's server is slow stop being evidence of anything,
-and a suite people learn to re-run until it goes green has no value at all.
-Live tests exist, carry the `live` marker, and are excluded by default.
+The offline suite never touches the network, so everything here is
+deterministic and runs in milliseconds. Tests that can fail because someone
+else's server is slow stop being evidence of anything, and a suite people
+re-run until it goes green is worth nothing. Live tests carry the `live`
+marker and are excluded by default.
 """
 
 from __future__ import annotations
@@ -22,10 +22,9 @@ from foodgraph import ingest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
-#: Fixture payloads carry fixed timestamps, which would eventually drift past
-#: the staleness threshold and fail the freshness check for no good reason.
-#: Clean payloads are re-dated on load so the suite stays stable over time;
-#: staleness is tested by injecting it explicitly instead.
+# Fixture payloads carry fixed timestamps, which would eventually drift past
+# the staleness threshold and fail freshness for no good reason. Clean
+# payloads get re-dated on load; staleness is tested by injecting it.
 RECENT_AGE_DAYS = 30
 
 
@@ -68,10 +67,10 @@ def clean_db(db: sqlite3.Connection, clean_payloads: list[dict[str, Any]]) -> sq
 def product_codes(clean_db: sqlite3.Connection) -> list[str]:
     """Codes actually present in the loaded fixture.
 
-    Tests derive the row they poke from here instead of hardcoding a barcode.
-    A test that names a specific product silently stops testing anything the
-    day the fixtures are re-recorded: the UPDATE matches zero rows, no defect
-    is injected, and the check "passes".
+    Tests take the row they poke from here instead of hardcoding a barcode.
+    Name a specific product and the test quietly stops testing anything the
+    day the fixtures change - the UPDATE matches no rows, no defect gets
+    injected, and the check "passes".
     """
     rows = clean_db.execute("SELECT code FROM product ORDER BY code").fetchall()
     assert rows, "the fixture loaded no products"

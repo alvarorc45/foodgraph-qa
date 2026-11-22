@@ -26,10 +26,10 @@ def test_clean_data_passes_every_quality_check(check, clean_db: sqlite3.Connecti
 
 @pytest.mark.quality
 def test_thresholds_are_physically_sensible() -> None:
-    """The constants are the judgement in this harness, so they get asserted.
+    """The constants are the judgement in this harness, so assert them.
 
-    If someone relaxes MAX_KCAL_100G to 5000 to silence an alert, that is a
-    decision worth failing a build over, not a config tweak.
+    Relaxing MAX_KCAL_100G to 5000 to silence an alert is a decision worth
+    failing a build over, not a config tweak.
     """
     # Pure fat is ~9 kcal/g, so 100 g cannot exceed ~900 kcal.
     assert 800 <= MAX_KCAL_100G <= 950
@@ -53,23 +53,23 @@ def test_results_carry_evidence(clean_db: sqlite3.Connection) -> None:
 
 @pytest.mark.quality
 def test_drift_threshold_is_per_field_and_strict() -> None:
-    """A field either still arrives or it does not.
+    """A field either still arrives or it doesn't.
 
-    Drift is not a statistical tail, so the share that counts as "gone" sits
-    just under 100%. The margin exists only because a payload can legitimately
-    omit an empty field; it is not room to absorb a real schema change.
+    Drift isn't a statistical tail, so the share that counts as gone sits
+    just under 100%. The margin is there because a payload can legitimately
+    omit an empty field, not to absorb a real schema change.
     """
     assert 0.80 <= FIELD_ABSENT_SHARE < 1.0
 
 
 @pytest.mark.quality
 def test_a_tolerated_result_is_not_reported_as_clean(db: sqlite3.Connection) -> None:
-    """Offending rows inside the tolerance must still be visible.
+    """Offending rows inside the tolerance still have to be visible.
 
-    This is the regression test for a report that printed `[PASS] 8/50` —
-    identical in shape to `[PASS] 0/1841`. The build was right to stay green;
-    the output was wrong to say nothing. A tolerance that silences the finding
-    as well as the failure is just a blind spot with a config value.
+    Regression test for a report that printed `[PASS] 8/50`, identical in
+    shape to `[PASS] 0/1841`. The build was right to stay green and the
+    output was wrong to say nothing. A tolerance that silences the finding as
+    well as the failure is a blind spot with a config value attached.
     """
     from foodgraph import ingest
     from foodgraph.checks import by_name
@@ -103,7 +103,7 @@ def test_a_tolerated_result_is_not_reported_as_clean(db: sqlite3.Connection) -> 
     assert "PASS" not in result.summary()
     assert result.samples, "the tolerated rows must still come with evidence"
 
-    # And the renderers must carry that distinction through, or the whole
-    # point is lost the moment anyone reads the report instead of the object.
+    # The renderers have to carry that through too, or the point is lost the
+    # moment someone reads the report instead of the object.
     assert "## Tolerated" in to_markdown([result])
     assert "allow" in to_html([result])

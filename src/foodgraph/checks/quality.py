@@ -1,10 +1,9 @@
-"""Data-quality checks: completeness, volume, freshness and anomalies.
+"""Completeness, volume, freshness and anomalies.
 
-Where the graph module asks "is this well formed?", this one asks "is this
-believable?". The two fail for different reasons and get different severities:
-a broken edge is a pipeline bug, an implausible calorie figure is usually a
-contributor typo upstream. Both matter to whoever consumes the data, but only
-one of them is the pipeline's fault.
+The graph module asks whether the data is well formed. This one asks whether
+it's believable. They fail for different reasons and get different
+severities - a broken edge is our bug, an implausible calorie figure is
+usually a contributor typo upstream.
 """
 
 from __future__ import annotations
@@ -20,31 +19,34 @@ from .base import MAX_SAMPLES, Check, CheckResult, Severity, rows_to_dicts, sql_
 # Physical bounds. Fat is the densest macronutrient at ~9 kcal/g, so nothing
 # edible exceeds ~900 kcal per 100 g; pure oil sits just under it.
 MAX_KCAL_100G = 900.0
-#: Macros are grams per 100 g, so they cannot sum past 100. A small margin
-#: absorbs honest rounding in the source data rather than flagging it.
+# Grams per 100 g can't sum past 100. The margin absorbs honest rounding in
+# the source rather than flagging it.
 MACRO_SUM_LIMIT = 100.0 + 2.0
-#: Atwater factors, for cross-checking declared energy against declared macros.
 KCAL_PER_G = {"protein": 4.0, "carbs": 4.0, "fat": 9.0}
-#: How far declared energy may stray from computed energy before it is
-#: suspicious. Fibre, polyols and rounding all move the number legitimately,
-#: so the band is wide: this is meant to catch unit mix-ups and typos, not to
-#: police nutrition labelling.
+# How far declared energy may stray from computed before we call it
+# suspicious. Wide on purpose - fibre, polyols and rounding all move the
+# number legitimately, and we're after unit mix-ups, not labelling errors.
 ENERGY_TOLERANCE = 0.30
-#: Products older than this are stale rather than merely old.
 STALE_AFTER_DAYS = 365 * 3
-#: A requested field counts as dropped upstream once it is missing from this
-#: share of payloads. Set high on purpose: the API omits a field when it is
-#: empty for a product, so scattered absences are empty values, while a real
-#: schema change takes the field out of everything at once. See `schema_drift`.
+
+# Below this many payloads, drift isn't a question the data can answer. OFF
+# omits a field when it's empty for a product, so in a one-product run any
+# field that product lacks is "absent from 100%" - which is how a
+# single-barcode reproduction once broke the build. Twenty is where a 90%
+# absence stops being something a few sparse records can produce by chance.
+DRIFT_MIN_PAYLOADS = 20
+
+# A field counts as dropped upstream once it's missing from this share of
+# payloads. High on purpose, for the same reason as above.
 FIELD_ABSENT_SHARE = 0.90
 
 
 def completeness(conn: sqlite3.Connection) -> CheckResult:
-    """Products missing any field the downstream consumer actually needs.
+    """Products missing a field the consumer actually needs.
 
-    "Complete" is defined by what breaks if it is absent, not by what the API
-    could return. A calorie tracker cannot do anything with a product that has
-    no name or no energy, so those two are the bar.
+    Complete means what breaks if it's absent, not everything the API could
+    return. A calorie tracker can't do anything with a product that has no
+    name or no energy, so that's the bar.
     """
     return sql_check(
         conn,
@@ -64,9 +66,9 @@ def completeness(conn: sqlite3.Connection) -> CheckResult:
 def volume(conn: sqlite3.Connection) -> CheckResult:
     """Did the last run load roughly what it asked for?
 
-    Catches the partial load: the run that fetched 500 products, hit an error
-    at 40 and committed anyway. Nothing downstream errors, the numbers just
-    quietly get smaller.
+    Catches the partial load - the run that asked for 500, hit an error at 40
+    and committed anyway. Nothing downstream errors, the numbers just get
+    smaller.
     """
     row = conn.execute(
         """
@@ -104,9 +106,8 @@ def volume(conn: sqlite3.Connection) -> CheckResult:
 def freshness(conn: sqlite3.Connection) -> CheckResult:
     """Products nobody has touched upstream in years.
 
-    Freshness here is about the source data, not about when we copied it:
-    re-fetching a record that was last edited in 2019 every morning does not
-    make it fresh, it just makes the copy recent.
+    About the source record, not our copy of it. Re-fetching something last
+    edited in 2019 every morning doesn't make it fresh.
     """
     cutoff = int(time.time()) - STALE_AFTER_DAYS * 86400
     return sql_check(
@@ -172,14 +173,16 @@ def impossible_macros(conn: sqlite3.Connection) -> CheckResult:
 
 
 def energy_macro_consistency(conn: sqlite3.Connection) -> CheckResult:
-    """Declared energy that contradicts the declared macros.
+    """Declared energy contradicting the declared macros.
 
-    This is the check worth having. Each field on its own looks perfectly
-    reasonable; only the relationship between them is wrong. It catches the
-    kJ value pasted into the kcal field, the per-portion figure stored as
-    per-100 g, and the decimal point in the wrong place — all of which pass
-    every single-column validation and then quietly corrupt everything
-    computed downstream.
+    Every field here looks fine on its own and only the relationship between
+    them is wrong, which is what makes it worth having. Catches kJ pasted
+    into the kcal field, a per-portion figure stored as per-100 g, and a
+    misplaced decimal point - none of which any single-column validation
+    would ever see.
+
+    Note it can't see an error that scales energy and macros together, since
+    that leaves the ratio intact. The absolute bounds above cover that case.
     """
     return sql_check(
         conn,
@@ -227,20 +230,17 @@ def energy_macro_consistency(conn: sqlite3.Connection) -> CheckResult:
 
 
 def schema_drift(conn: sqlite3.Connection) -> CheckResult:
-    """Fields the pipeline depends on that the API stopped sending.
+    """Fields we depend on that the API stopped sending.
 
-    Compared against the raw payloads rather than against the parsed columns,
-    because a field vanishing upstream and a field the loader never read look
-    identical once parsing has happened.
+    Compared against the raw payloads, not the parsed columns - once parsing
+    has happened a field that vanished upstream and a field the loader never
+    read look identical.
 
-    Measured **per field, not per product**, which is the only unit that makes
-    sense here. Open Food Facts omits a field entirely when it is empty for a
-    product, so a product with no `additives_tags` key is a product with no
-    additives — not a schema change. Drift is a field disappearing from
-    essentially every payload at once. Counting products instead would mix the
-    two together: a handful of products with empty fields would look like
-    partial drift, and real drift would have to be tolerated at some
-    indefensible threshold to keep the first case quiet.
+    Counted per field rather than per product. OFF omits a field entirely
+    when it's empty for a product, so a product with no `additives_tags` key
+    just has no additives. Counting products mixes the two cases together,
+    and the only way to keep the common one quiet is a tolerance wide enough
+    for real drift to hide in.
     """
     from ..client import PRODUCT_FIELDS
 
@@ -255,6 +255,25 @@ def schema_drift(conn: sqlite3.Connection) -> CheckResult:
 
     # `code` is always present and `nutriments` is checked separately below.
     required = sorted(f for f in PRODUCT_FIELDS if f not in {"code", "nutriments"})
+
+    if len(rows) < DRIFT_MIN_PAYLOADS:
+        # Not "the contract holds" - "this run can't tell you". The
+        # description says so, because a silent green tick reads as the
+        # first one.
+        return CheckResult(
+            name="schema_drift",
+            severity=Severity.ERROR,
+            passed=True,
+            offenders=0,
+            examined=len(required),
+            description=(
+                f"not checked: {len(rows)} payload(s) is below the "
+                f"{DRIFT_MIN_PAYLOADS} needed to tell a dropped field from "
+                "one a product simply has nothing to put in"
+            ),
+            samples=[],
+        )
+
     payloads = [json.loads(row["payload"]) for row in rows]
 
     offenders: list[dict[str, Any]] = []
@@ -284,7 +303,7 @@ def schema_drift(conn: sqlite3.Connection) -> CheckResult:
 
 
 def orphan_products(conn: sqlite3.Connection) -> CheckResult:
-    """Products with no raw payload: loaded from somewhere untracked."""
+    """Products with no raw payload, loaded from somewhere untracked."""
     return sql_check(
         conn,
         name="orphan_products",
@@ -313,7 +332,7 @@ CHECKS: tuple[Check, ...] = (
           "macros are physically possible", impossible_macros, ("quality",)),
     Check("energy_macro_consistency", Severity.WARN,
           "energy agrees with macros", energy_macro_consistency, ("quality",)),
-    Check("schema_drift", Severity.WARN,
+    Check("schema_drift", Severity.ERROR,
           "the API still sends the agreed fields", schema_drift, ("quality",)),
     Check("orphan_products", Severity.ERROR,
           "products keep their source payload", orphan_products, ("quality",)),

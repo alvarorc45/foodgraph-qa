@@ -1,10 +1,9 @@
-"""Integrity of the knowledge graph itself.
+"""Structural integrity of the graph.
 
-These are structural rules: they do not care whether a calorie figure is
-plausible, only whether the graph is well formed. Each one is a SQL query that
-returns the offending rows, because the graph lives in a relational store and
-expressing "every edge endpoint must resolve to a node" as a LEFT JOIN is both
-shorter and faster than walking it in Python.
+Nothing here cares whether a calorie figure is plausible, only whether the
+graph is well formed. Each rule is a query returning the offending rows -
+the graph lives in a relational store, so "every endpoint resolves to a node"
+is a LEFT JOIN rather than a walk in Python.
 """
 
 from __future__ import annotations
@@ -32,11 +31,11 @@ _VALID_TRIPLES = " UNION ALL ".join(
 
 
 def orphan_edges(conn: sqlite3.Connection) -> CheckResult:
-    """Edges pointing at a node that does not exist, on either end.
+    """Edges pointing at a node that doesn't exist, on either end.
 
-    The classic graph-loading defect: the edge is written before the node, or
-    the node load fails and nobody notices because the edge still resolves in
-    a join that happens to be inner.
+    The classic loading defect - edge written before the node, or the node
+    load failed and nobody noticed because every query happened to use an
+    inner join.
     """
     return sql_check(
         conn,
@@ -57,11 +56,11 @@ def orphan_edges(conn: sqlite3.Connection) -> CheckResult:
 
 
 def invalid_relationship_type(conn: sqlite3.Connection) -> CheckResult:
-    """Edges whose relationship is unknown, or used between the wrong labels.
+    """Unknown relationship, or one used between the wrong labels.
 
-    Both nodes can exist and the edge still be wrong: CONTAINS_INGREDIENT
-    pointing at a brand is a well-formed row and a meaningless fact. Checking
-    the triple against the ontology is what catches it.
+    Both nodes can exist and the edge still be nonsense. CONTAINS_INGREDIENT
+    pointing at a brand is a perfectly well-formed row that means nothing,
+    and only checking the triple against the ontology finds it.
     """
     return sql_check(
         conn,
@@ -100,13 +99,12 @@ def unknown_node_label(conn: sqlite3.Connection) -> CheckResult:
 
 
 def duplicate_nodes(conn: sqlite3.Connection) -> CheckResult:
-    """Distinct ids that denote the same thing.
+    """Two ids denoting one thing.
 
-    The primary key stops the same id appearing twice, so duplicates show up
-    as two ids with one normalised name: ``coca-cola`` and ``coca_cola``, or a
-    trailing space. In a knowledge graph this silently splits a product's
-    relationships across two nodes, so every aggregate over that entity is
-    wrong and nothing ever errors.
+    The primary key stops an id repeating, so duplicates turn up as two ids
+    sharing a normalised name - `coca-cola` against `coca_cola`, or a
+    trailing space. The entity's edges end up split between the two nodes and
+    every aggregate over it is quietly halved.
     """
     unions = " UNION ALL ".join(
         f"SELECT '{label}' AS label, id, "
@@ -135,7 +133,7 @@ def duplicate_nodes(conn: sqlite3.Connection) -> CheckResult:
 
 
 def self_referencing_edges(conn: sqlite3.Connection) -> CheckResult:
-    """A node related to itself: always a loader bug, never a real fact here."""
+    """A node related to itself. Always a loader bug in this model."""
     return sql_check(
         conn,
         name="self_referencing_edges",
@@ -151,11 +149,11 @@ def self_referencing_edges(conn: sqlite3.Connection) -> CheckResult:
 
 
 def unreachable_nodes(conn: sqlite3.Connection) -> CheckResult:
-    """Non-product nodes that no edge points to.
+    """Non-product nodes nothing points at.
 
-    Harmless on its own, but it is the fingerprint of a half-finished load or
-    of a deleted product leaving its ingredients behind, and it inflates every
-    count taken over those tables.
+    Harmless in itself, but it's the fingerprint of a half-finished load or a
+    deleted product that left its ingredients behind, and it inflates every
+    count over those tables.
     """
     unions = " UNION ALL ".join(
         f"SELECT '{label}' AS label, id FROM {table}"
@@ -179,11 +177,11 @@ def unreachable_nodes(conn: sqlite3.Connection) -> CheckResult:
 
 
 def missing_expected_relationship(conn: sqlite3.Connection) -> CheckResult:
-    """Products lacking a relationship the ontology expects them to have.
+    """Products missing a relationship the ontology expects.
 
-    A warning, not an error: on a crowd-sourced dataset some products
-    genuinely have no category yet. What matters is the proportion moving, so
-    the tolerance is where the judgement lives, not the rule.
+    Warning rather than error. Plenty of crowd-sourced products genuinely
+    have no category yet; what matters is the proportion moving. The
+    judgement is in the tolerance, not in the rule.
     """
     rels = ", ".join(f"'{rel}'" for rel in onto.EXPECTED_PRODUCT_RELATIONSHIPS)
     return sql_check(
@@ -207,6 +205,68 @@ def missing_expected_relationship(conn: sqlite3.Connection) -> CheckResult:
     )
 
 
+# How much of the tag vocabulary can stay unresolved before the graph stops
+# being safe to aggregate over. A judgement call rather than a measurement -
+# there's no published figure, and this wants re-tuning once we have a
+# baseline. Ten percent is roughly where "a few odd entries" turns into "a
+# tenth of your entities are strings nobody can join on".
+UNRESOLVED_SHARE = 0.10
+
+# In every payload we've sampled, tags that matched the taxonomy came back as
+# `en:` and raw contributor text kept its original prefix. Inferred from the
+# data rather than from documented behaviour, hence WARN and not ERROR.
+RESOLVED_LANG = "en"
+
+
+def unresolved_entities(conn: sqlite3.Connection) -> CheckResult:
+    """Nodes the source itself couldn't resolve to its taxonomy.
+
+    OFF rewrites a tag to `en:<slug>` when it matches the taxonomy and passes
+    the contributor's raw text through otherwise, prefix and all. The prefix
+    that survived is therefore a verdict from upstream.
+
+    This is where the junk lives. On live data the unresolved nodes aren't
+    ingredients at all - storage and heating instructions, marketing copy,
+    nutrition-table headings, a manufacturer's postal address, health
+    warnings, and strings that read like two ingredients run together where
+    the comma was lost. Plenty carry character substitutions
+    (`casejnato-de-sqdio`, `flsfato-de-potasio`) of the kind text recognition
+    produces, though nothing in the data says how they were entered.
+
+    Ordered by `referenced_by` ascending, because a real ingredient is shared
+    and a one-off string is not. That puts the likely garbage first.
+    """
+    tables = [(label, table) for label, table in sorted(onto.NODE_TABLES.items())
+              if label != onto.PRODUCT]
+    unresolved = " UNION ALL ".join(
+        f"SELECT '{label}' AS label, id, name, lang FROM {table} "
+        f"WHERE lang IS NOT NULL AND lang <> '{RESOLVED_LANG}'"
+        for label, table in tables
+    )
+    total = " UNION ALL ".join(f"SELECT id FROM {table}" for _, table in tables)
+
+    return sql_check(
+        conn,
+        name="unresolved_entities",
+        severity=Severity.WARN,
+        description=(
+            "tags should resolve to the upstream taxonomy; one that kept a "
+            "non-English prefix is raw contributor text"
+        ),
+        offenders_sql=f"""
+            WITH unresolved AS ({unresolved})
+            SELECT u.label, u.lang, u.id, u.name,
+                   COUNT(DISTINCT e.src_id) AS referenced_by
+            FROM unresolved u
+            LEFT JOIN edge e ON e.dst_type = u.label AND e.dst_id = u.id
+            GROUP BY u.label, u.id
+            ORDER BY referenced_by ASC, LENGTH(u.name) DESC
+        """,
+        examined_sql=f"SELECT COUNT(*) FROM ({total})",
+        tolerance=UNRESOLVED_SHARE,
+    )
+
+
 CHECKS: tuple[Check, ...] = (
     Check("orphan_edges", Severity.ERROR,
           "edge endpoints resolve to real nodes", orphan_edges, ("graph",)),
@@ -223,4 +283,7 @@ CHECKS: tuple[Check, ...] = (
     Check("missing_expected_relationship", Severity.WARN,
           "products carry their expected relationships",
           missing_expected_relationship, ("graph",)),
+    Check("unresolved_entities", Severity.WARN,
+          "tags resolve to the upstream taxonomy",
+          unresolved_entities, ("graph",)),
 )

@@ -1,9 +1,8 @@
-"""Client for the Open Food Facts REST API (v2).
+"""Open Food Facts v2 client.
 
-Deliberately thin: one session, explicit timeouts, bounded retries and a
-polite request rate. Open Food Facts is a volunteer-run service that asks
-callers to identify themselves and not to hammer it, so the User-Agent is
-mandatory here rather than optional.
+Thin on purpose. One session, explicit timeouts, bounded retries, and a
+request rate that won't get us blocked - OFF is volunteer-run and asks
+callers to identify themselves.
 """
 
 from __future__ import annotations
@@ -20,9 +19,8 @@ log = logging.getLogger(__name__)
 BASE_URL = "https://world.openfoodfacts.org"
 SEARCH_URL = "https://search.openfoodfacts.org"
 
-#: Asking for a field list keeps responses small and, more importantly, makes
-#: the contract explicit: these are the fields the pipeline depends on, so the
-#: schema-drift check has something concrete to compare against.
+# Requesting an explicit field list keeps responses small, and doubles as the
+# contract schema_drift compares against.
 PRODUCT_FIELDS = (
     "code",
     "product_name",
@@ -40,8 +38,6 @@ RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
 class OffError(RuntimeError):
-    """A request failed in a way the caller cannot paper over."""
-
     def __init__(self, message: str, status: int | None = None) -> None:
         super().__init__(message)
         self.status = status
@@ -49,12 +45,11 @@ class OffError(RuntimeError):
 
 @dataclass(slots=True)
 class OffClient:
-    user_agent: str = "foodgraph-qa/0.1 (https://github.com/your-user/foodgraph-qa)"
+    user_agent: str = "foodgraph-qa/0.1 (https://github.com/alvarorc45/foodgraph-qa)"
     base_url: str = BASE_URL
     timeout: float = 15.0
     max_attempts: int = 3
-    #: Minimum seconds between requests. Open Food Facts rate-limits the
-    #: product endpoint; staying under it is cheaper than handling the 429.
+    # Min seconds between requests. Cheaper than handling the 429.
     min_interval: float = 0.4
     session: requests.Session = field(default_factory=requests.Session, repr=False)
     _last_request: float = field(default=0.0, repr=False)
@@ -62,16 +57,13 @@ class OffClient:
     def __post_init__(self) -> None:
         self.session.headers.update({"User-Agent": self.user_agent})
 
-    # ------------------------------------------------------------------ public
-
     def product(self, barcode: str) -> dict[str, Any] | None:
-        """Return one product, or None when the barcode is not in the database.
+        """One product, or None if the barcode isn't in the database.
 
-        "Not found" is a legitimate answer, not a failure, so it is None rather
-        than an exception. The API signals it with ``status: 0`` in a 200
-        response as well as with a 404, and both spellings are handled: relying
-        on the status code alone silently turns missing products into empty
-        ones, which is how a pipeline ends up loading blank rows.
+        Not-found is an answer, not a failure, hence None rather than an
+        exception. Watch out for the two spellings - OFF returns 404 for some
+        missing products and a 200 carrying `status: 0` for others. Check only
+        the status code and the second kind quietly becomes an empty product.
         """
         url = f"{self.base_url}/api/v2/product/{barcode}"
         params = {"fields": ",".join(PRODUCT_FIELDS)}
@@ -86,7 +78,6 @@ class OffClient:
         return product if isinstance(product, dict) else None
 
     def search(self, query: str, page_size: int = 20) -> list[dict[str, Any]]:
-        """Full-text search. Used to build a working set of products."""
         url = f"{self.base_url}/cgi/search.pl"
         params = {
             "search_terms": query,
@@ -97,11 +88,9 @@ class OffClient:
             "fields": ",".join(PRODUCT_FIELDS),
         }
         response = self._get(url, params=params)
-        assert response is not None  # allow_404 is False, so this cannot be None
+        assert response is not None  # allow_404 is False, so never None here
         products = response.json().get("products", [])
         return [p for p in products if isinstance(p, dict)]
-
-    # ----------------------------------------------------------------- private
 
     def _get(
         self,
@@ -121,8 +110,8 @@ class OffClient:
                 log.warning("GET %s attempt %d: %s", url, attempt, last_error)
                 continue
             except requests.RequestException as exc:
-                # Connection-level failures are not worth retrying three times;
-                # they almost never fix themselves within a second.
+                # Don't retry connection-level failures - they don't fix
+                # themselves in a second and we'd just stall for three.
                 raise OffError(f"request to {url} failed: {exc}") from exc
 
             if response.status_code == 404 and allow_404:
@@ -147,7 +136,6 @@ class OffClient:
         raise OffError(f"GET {url} failed after {self.max_attempts} attempts: {last_error}")
 
     def _backoff(self, attempt: int, response: requests.Response) -> float:
-        """Exponential backoff, but obey Retry-After when the server sends it."""
         header = response.headers.get("Retry-After")
         if header:
             try:

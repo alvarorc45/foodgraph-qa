@@ -1,12 +1,11 @@
 """Proof that the checks have teeth.
 
-A validation suite that only ever runs against good data tells you nothing: a
-check that returns PASS unconditionally would look identical. So every rule
-gets a defect built specifically to trip it, and the test asserts two things —
-that the right check fails, and that it reports the offending row.
+A suite that only ever runs against good data tells you nothing, since a
+rule hardcoded to return PASS would look identical. So every rule gets a
+defect built to trip it, and each test asserts two things - that the right
+check fails, and that it reports the offending row.
 
-This is the file worth reading first. It is the difference between claiming
-the pipeline is monitored and demonstrating it.
+Probably the file to read first.
 """
 
 from __future__ import annotations
@@ -20,6 +19,7 @@ import pytest
 
 from foodgraph import ingest
 from foodgraph.checks import by_name
+from foodgraph.checks.quality import DRIFT_MIN_PAYLOADS
 
 
 def _assert_fails(conn: sqlite3.Connection, check_name: str) -> None:
@@ -51,10 +51,10 @@ def test_orphan_edge_is_detected(clean_db, product_codes: list[str]) -> None:
 
 
 def test_wrong_relationship_type_is_detected(clean_db, product_codes: list[str]) -> None:
-    """Both nodes exist; the relationship between them is nonsense.
+    """Both nodes exist and the relationship between them is nonsense.
 
-    CONTAINS_INGREDIENT from a product to a *brand* is a perfectly valid row
-    that no foreign key would reject, and a fact that means nothing.
+    CONTAINS_INGREDIENT from a product to a brand is a row no foreign key
+    would reject and a fact that means nothing.
     """
     brand = clean_db.execute("SELECT id FROM brand LIMIT 1").fetchone()["id"]
     clean_db.execute(
@@ -100,10 +100,10 @@ def test_self_loop_is_detected(clean_db) -> None:
 
 
 def test_duplicate_entity_under_two_ids_is_detected(clean_db, product_codes: list[str]) -> None:
-    """One ingredient wearing two ids, e.g. `palm-oil` and `palm_oil`.
+    """One ingredient wearing two ids, `palm-oil` and `palm_oil`.
 
-    Nothing errors: both nodes are valid, both have edges. The damage is that
-    every count grouped by ingredient is now split in two.
+    Nothing errors. Both nodes are valid and both have edges; the damage is
+    that every count grouped by ingredient is now split in two.
     """
     original = clean_db.execute("SELECT id, name FROM ingredient LIMIT 1").fetchone()
     # Same name, different id: the two nodes denote one real-world thing.
@@ -117,6 +117,43 @@ def test_duplicate_entity_under_two_ids_is_detected(clean_db, product_codes: lis
     )
     clean_db.commit()
     _assert_fails(clean_db, "duplicate_nodes")
+
+
+def test_unresolved_entities_are_detected(db: sqlite3.Connection) -> None:
+    """Raw contributor text entering the graph as if it were an entity.
+
+    Taken from a real payload. OFF resolved `corn` and `sugar` against its
+    taxonomy and left `casejnato-de-sqdio` carrying its original `es:`
+    prefix because it matched nothing. Both end up as nodes and look
+    identical in the graph; only the prefix says which one is real.
+    """
+    payloads = [
+        {
+            "code": f"555555555{i:04d}",
+            "product_name": f"Snack {i}",
+            "brands": "Test", "brands_tags": ["test-brand"],
+            "categories_tags": ["en:snacks"],
+            "ingredients_tags": [
+                "en:corn", "en:sugar",
+                "es:casejnato-de-sqdio",
+                "es:contiene-ingredientes-de-huevo",
+            ],
+            "additives_tags": [],
+            "quantity": "100 g",
+            "nutriments": {"energy-kcal_100g": 500, "proteins_100g": 6,
+                           "carbohydrates_100g": 60, "fat_100g": 25},
+            "last_modified_t": int(time.time()) - 86400,
+        }
+        for i in range(10)
+    ]
+    ingest.load(db, payloads, source="synthetic")
+    _assert_fails(db, "unresolved_entities")
+
+    # The two well-formed ingredients mustn't come along for the ride. A
+    # check that flags everything is as useless as one that flags nothing.
+    offenders = by_name("unresolved_entities").run(db).samples
+    flagged = {row["id"] for row in offenders}
+    assert "corn" not in flagged and "sugar" not in flagged
 
 
 def test_unreferenced_node_is_detected(clean_db: sqlite3.Connection) -> None:
@@ -179,9 +216,9 @@ def test_macros_over_100g_are_detected(clean_db, product_codes: list[str]) -> No
 def test_energy_contradicting_macros_is_detected(db: sqlite3.Connection) -> None:
     """The kJ figure pasted into the kcal field.
 
-    Every column passes on its own: 2252 kcal is rejected by the bounds check,
-    so use a value that is not — the macros of milk with the energy of a
-    biscuit. Only comparing the two reveals it.
+    Every column passes on its own. 2252 kcal would trip the bounds check, so
+    use something that doesn't - the macros of milk with the energy of a
+    biscuit. Only comparing the two finds it.
     """
     payloads = [
         {
@@ -249,8 +286,29 @@ def test_partial_load_is_detected(clean_db: sqlite3.Connection) -> None:
     assert result.offenders == 460
 
 
-def test_schema_drift_is_detected(clean_db: sqlite3.Connection) -> None:
-    """The API stops sending a field the pipeline depends on."""
+def test_schema_drift_is_detected(db: sqlite3.Connection) -> None:
+    """The API stops sending a field we depend on.
+
+    Needs a real sample. Below DRIFT_MIN_PAYLOADS the check declines to
+    answer, since one sparse product looks the same as a vanished field.
+    """
+    payloads = [
+        {
+            "code": f"444444444{i:04d}",
+            "product_name": f"Product {i}",
+            "brands": "Test", "brands_tags": ["test-brand"],
+            "categories_tags": ["en:test-category"],
+            "ingredients_tags": ["en:test-ingredient"],
+            "additives_tags": [],
+            "quantity": "100 g",
+            "nutriments": {"energy-kcal_100g": 100, "proteins_100g": 1,
+                           "carbohydrates_100g": 20, "fat_100g": 1},
+            "last_modified_t": int(time.time()) - 86400,
+        }
+        for i in range(DRIFT_MIN_PAYLOADS)
+    ]
+    ingest.load(db, payloads, source="synthetic")
+    clean_db = db
     rows = clean_db.execute("SELECT code, payload FROM raw_payload").fetchall()
     for row in rows:
         payload: dict[str, Any] = json.loads(row["payload"])
@@ -273,6 +331,35 @@ def test_product_without_source_payload_is_detected(clean_db: sqlite3.Connection
     _assert_fails(clean_db, "orphan_products")
 
 
+def test_a_tiny_run_does_not_report_drift(db: sqlite3.Connection) -> None:
+    """Regression. One barcode used to break the build.
+
+    `--barcodes <code>` is the reproduction step every bug report here tells
+    a reader to run. OFF omits a field when the product has nothing to put in
+    it, so one product with no additives made `additives_tags` absent from
+    100% of payloads and schema_drift failed the build on sound data.
+    """
+    ingest.load(db, [{
+        "code": "7501003101761",
+        "product_name": "Salsa de cacahuate picante cremosa",
+        "brands": "Test", "brands_tags": ["test-brand"],
+        "categories_tags": ["en:sauces"],
+        "ingredients_tags": ["en:peanut"],
+        # No additives, so the API would not send the key at all.
+        "quantity": "240 g",
+        "nutriments": {"energy-kcal_100g": 700, "proteins_100g": 12.7,
+                       "carbohydrates_100g": 26.7, "fat_100g": 60.7},
+        "last_modified_t": int(time.time()) - 86400,
+    }], source="one-barcode")
+
+    result = by_name("schema_drift").run(db)
+    assert result.passed, f"a one-product run must not claim drift: {result.summary()}"
+    assert "not checked" in result.description, (
+        "a green tick that means 'cannot tell' must say so, or it reads as "
+        "'the contract holds'"
+    )
+
+
 # --------------------------------------------------------------- regression
 
 @pytest.mark.parametrize(
@@ -280,7 +367,8 @@ def test_product_without_source_payload_is_detected(clean_db: sqlite3.Connection
     [
         "orphan_edges", "invalid_relationship_type", "unknown_node_label",
         "self_referencing_edges", "duplicate_nodes", "unreachable_nodes",
-        "missing_expected_relationship", "completeness", "volume", "freshness",
+        "missing_expected_relationship", "unresolved_entities",
+        "completeness", "volume", "freshness",
         "implausible_energy", "impossible_macros", "energy_macro_consistency",
         "schema_drift", "orphan_products",
     ],
@@ -288,9 +376,9 @@ def test_product_without_source_payload_is_detected(clean_db: sqlite3.Connection
 def test_every_check_has_a_defect_test(check_name: str) -> None:
     """Guards against adding a rule and forgetting to prove it works.
 
-    Reads this file's own source for the check's name. Crude, but it fails
-    loudly the day someone registers a check and never writes a defect for it,
-    which is exactly when a blind validator slips into the suite.
+    Greps this file's own source for the check name. Crude, but it fails
+    loudly the day someone registers a rule and never writes a defect for it,
+    which is exactly when a blind validator slips in.
     """
     source = __import__("pathlib").Path(__file__).read_text(encoding="utf-8")
     occurrences = source.count(f'"{check_name}"')
