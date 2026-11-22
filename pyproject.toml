@@ -1,0 +1,33 @@
+[project]
+name = "foodgraph-qa"
+version = "0.1.0"
+description = "Data-quality and knowledge-graph integrity harness for the Open Food Facts API"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# Offline by default. The suite must be deterministic in CI, so anything that
+# touches the network is opt-in via `-m live`.
+addopts = "-m 'not live' --strict-markers -ra"
+markers = [
+    "live: hits the real Open Food Facts API (needs network; excluded by default)",
+    "graph: knowledge-graph integrity checks",
+    "quality: data-quality checks",
+]

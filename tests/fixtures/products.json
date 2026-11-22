@@ -1,0 +1,139 @@
+[
+  {
+    "code": "3017620422003",
+    "product_name": "Nutella",
+    "brands": "Ferrero",
+    "brands_tags": ["ferrero"],
+    "categories_tags": ["en:breakfasts", "en:spreads", "en:sweet-spreads"],
+    "ingredients_tags": ["en:sugar", "en:palm-oil", "en:hazelnut", "en:skimmed-milk-powder"],
+    "additives_tags": ["en:e322"],
+    "quantity": "400 g",
+    "nutriments": {
+      "energy-kcal_100g": 539,
+      "energy-kj_100g": 2252,
+      "proteins_100g": 6.3,
+      "carbohydrates_100g": 57.5,
+      "fat_100g": 30.9
+    },
+    "last_modified_t": 1763000000
+  },
+  {
+    "code": "8410660010058",
+    "product_name": "Aceite de oliva virgen extra",
+    "brands": "Carbonell",
+    "brands_tags": ["carbonell"],
+    "categories_tags": ["en:fats", "en:vegetable-oils", "en:olive-oils"],
+    "ingredients_tags": ["en:olive-oil"],
+    "additives_tags": [],
+    "quantity": "1 l",
+    "nutriments": {
+      "energy-kcal_100g": 824,
+      "proteins_100g": 0,
+      "carbohydrates_100g": 0,
+      "fat_100g": 91.6
+    },
+    "last_modified_t": 1763100000
+  },
+  {
+    "code": "8480000123456",
+    "product_name": "Leche entera",
+    "brands": "Hacendado",
+    "brands_tags": ["hacendado"],
+    "categories_tags": ["en:dairies", "en:milks"],
+    "ingredients_tags": ["en:whole-milk"],
+    "additives_tags": [],
+    "quantity": "1 l",
+    "nutriments": {
+      "energy-kcal_100g": 64,
+      "proteins_100g": 3.2,
+      "carbohydrates_100g": 4.7,
+      "fat_100g": 3.6
+    },
+    "last_modified_t": 1763200000
+  },
+  {
+    "code": "8437008291017",
+    "product_name": "Pechuga de pollo",
+    "brands": "El Pozo",
+    "brands_tags": ["el-pozo"],
+    "categories_tags": ["en:meats", "en:poultries", "en:chicken-breasts"],
+    "ingredients_tags": ["en:chicken"],
+    "additives_tags": [],
+    "quantity": "500 g",
+    "nutriments": {
+      "energy-kcal_100g": 105,
+      "proteins_100g": 23,
+      "carbohydrates_100g": 0,
+      "fat_100g": 1.5
+    },
+    "last_modified_t": 1763300000
+  },
+  {
+    "code": "8410128750107",
+    "product_name": "Arroz redondo",
+    "brands": "SOS",
+    "brands_tags": ["sos"],
+    "categories_tags": ["en:cereals-and-potatoes", "en:rices"],
+    "ingredients_tags": ["en:rice"],
+    "additives_tags": [],
+    "quantity": "1 kg",
+    "nutriments": {
+      "energy-kcal_100g": 349,
+      "proteins_100g": 7.1,
+      "carbohydrates_100g": 78,
+      "fat_100g": 0.7
+    },
+    "last_modified_t": 1763400000
+  },
+  {
+    "code": "5201080000013",
+    "product_name": "Yogur griego natural",
+    "brands": "Fage",
+    "brands_tags": ["fage"],
+    "categories_tags": ["en:dairies", "en:yogurts"],
+    "ingredients_tags": ["en:milk", "en:cream", "en:ferments"],
+    "additives_tags": [],
+    "quantity": "500 g",
+    "nutriments": {
+      "energy-kcal_100g": 97,
+      "proteins_100g": 9,
+      "carbohydrates_100g": 3.6,
+      "fat_100g": 5
+    },
+    "last_modified_t": 1763500000
+  },
+  {
+    "code": "8480000987654",
+    "product_name": "Lentejas pardinas",
+    "brands": "Luengo",
+    "brands_tags": ["luengo"],
+    "categories_tags": ["en:legumes", "en:lentils"],
+    "ingredients_tags": ["en:lentils"],
+    "additives_tags": [],
+    "quantity": "500 g",
+    "nutriments": {
+      "energy-kcal_100g": 304,
+      "proteins_100g": 24.6,
+      "carbohydrates_100g": 48.8,
+      "fat_100g": 1.1
+    },
+    "last_modified_t": 1763600000
+  },
+  {
+    "code": "7622210449283",
+    "product_name": "Chocolate negro 70%",
+    "brands": "Valor",
+    "brands_tags": ["valor"],
+    "categories_tags": ["en:snacks", "en:sweet-snacks", "en:dark-chocolates"],
+    "ingredients_tags": ["en:cocoa-mass", "en:sugar", "en:cocoa-butter"],
+    "additives_tags": ["en:e322"],
+    "quantity": "100 g",
+    "nutriments": {
+      "energy-kcal_100g": 598,
+      "proteins_100g": 7.8,
+      "carbohydrates_100g": 45.9,
+      "fat_100g": 42.6
+    },
+    "last_modified_t": 1763700000
+  }
+]

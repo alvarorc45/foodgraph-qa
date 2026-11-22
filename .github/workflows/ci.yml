@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # 06:00 UTC daily. The offline suite cannot rot, but the live contract can:
+    # this is what turns an upstream API change into a notification instead of
+    # a surprise weeks later.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  offline:
+    name: Offline suite (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest -v
+
+      - name: Run the harness against recorded fixtures
+        run: python scripts/run_checks.py --from-fixtures
+
+      - name: Publish the data-quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-quality-report-py${{ matrix.python }}
+          path: reports/
+          if-no-files-found: ignore
+
+  live:
+    name: Live API contract
+    # Only on a schedule or on demand. Running this on every pull request
+    # would make an unrelated change fail because someone else's server was
+    # having a bad minute, and a suite that cries wolf stops being read.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Contract tests against the real API
+        run: pytest -m live -v
+
+      - name: Validate a live sample
+        run: python scripts/run_checks.py --search "chocolate" -n 40
+
+      - name: Publish the live report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-data-quality-report
+          path: reports/
+          if-no-files-found: ignore
