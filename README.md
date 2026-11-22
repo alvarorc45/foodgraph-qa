@@ -97,7 +97,7 @@ FAILED tests/test_checks_detect_defects.py::test_orphan_edge_is_detected
 E   AssertionError: orphan_edges passed despite an injected defect — the check is blind.
 E   [PASS] orphan_edges: 0/46 — every edge endpoint must resolve to an existing node
 
-1 failed, 81 passed, 3 skipped
+1 failed, 91 passed, 3 skipped
 ```
 
 One blind check, one failing test, a message that says what went wrong.
@@ -114,7 +114,15 @@ python scripts/run_checks.py --search chocolate -n 50   # validate live data
 
 # record real payloads to exercise the parser against them
 python scripts/record_fixtures.py --search chocolate -n 10
+
+python scripts/hunt.py                        # survey many slices, rank by defects
 ```
+
+`run_checks.py` validates one pull and gates on it. `hunt.py` answers the
+other question — *where* in the dataset the bad data lives — by sweeping
+several slices and ranking them. They are separate because popular products
+are the best-curated ones: a clean report for "chocolate" says the community
+looks after its flagship records, not that the dataset is sound.
 
 `run_checks.py` exits non-zero when an **error**-severity check fails, so it
 can gate a pipeline. Warnings are reported and do not break the build: on
@@ -170,7 +178,7 @@ src/foodgraph/
   checks/quality.py  completeness, volume, freshness, drift, anomalies
   report.py        markdown + HTML + exit code
 tests/             offline suite, defect-injection suite, live contract tests
-scripts/           run_checks.py, record_fixtures.py
+scripts/           run_checks.py, hunt.py, record_fixtures.py
 ```
 
 ## Two kinds of fixture, and why they are kept apart
