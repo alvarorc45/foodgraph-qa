@@ -1,9 +1,9 @@
 [
   {
-    "code": "3017620422003",
-    "product_name": "Nutella",
-    "brands": "Ferrero",
-    "brands_tags": ["ferrero"],
+    "code": "2000000000017",
+    "product_name": "Hazelnut cocoa spread",
+    "brands": "Example Spreads",
+    "brands_tags": ["example-spreads"],
     "categories_tags": ["en:breakfasts", "en:spreads", "en:sweet-spreads"],
     "ingredients_tags": ["en:sugar", "en:palm-oil", "en:hazelnut", "en:skimmed-milk-powder"],
     "additives_tags": ["en:e322"],
@@ -18,10 +18,10 @@
     "last_modified_t": 1763000000
   },
   {
-    "code": "8410660010058",
-    "product_name": "Aceite de oliva virgen extra",
-    "brands": "Carbonell",
-    "brands_tags": ["carbonell"],
+    "code": "2000000000024",
+    "product_name": "Extra virgin olive oil",
+    "brands": "Example Oils",
+    "brands_tags": ["example-oils"],
     "categories_tags": ["en:fats", "en:vegetable-oils", "en:olive-oils"],
     "ingredients_tags": ["en:olive-oil"],
     "additives_tags": [],
@@ -35,10 +35,10 @@
     "last_modified_t": 1763100000
   },
   {
-    "code": "8480000123456",
-    "product_name": "Leche entera",
-    "brands": "Hacendado",
-    "brands_tags": ["hacendado"],
+    "code": "2000000000031",
+    "product_name": "Whole milk",
+    "brands": "Example Dairy",
+    "brands_tags": ["example-dairy"],
     "categories_tags": ["en:dairies", "en:milks"],
     "ingredients_tags": ["en:whole-milk"],
     "additives_tags": [],
@@ -52,10 +52,10 @@
     "last_modified_t": 1763200000
   },
   {
-    "code": "8437008291017",
-    "product_name": "Pechuga de pollo",
-    "brands": "El Pozo",
-    "brands_tags": ["el-pozo"],
+    "code": "2000000000048",
+    "product_name": "Chicken breast",
+    "brands": "Example Meats",
+    "brands_tags": ["example-meats"],
     "categories_tags": ["en:meats", "en:poultries", "en:chicken-breasts"],
     "ingredients_tags": ["en:chicken"],
     "additives_tags": [],
@@ -69,10 +69,10 @@
     "last_modified_t": 1763300000
   },
   {
-    "code": "8410128750107",
-    "product_name": "Arroz redondo",
-    "brands": "SOS",
-    "brands_tags": ["sos"],
+    "code": "2000000000055",
+    "product_name": "Short grain rice",
+    "brands": "Example Grains",
+    "brands_tags": ["example-grains"],
     "categories_tags": ["en:cereals-and-potatoes", "en:rices"],
     "ingredients_tags": ["en:rice"],
     "additives_tags": [],
@@ -86,10 +86,10 @@
     "last_modified_t": 1763400000
   },
   {
-    "code": "5201080000013",
-    "product_name": "Yogur griego natural",
-    "brands": "Fage",
-    "brands_tags": ["fage"],
+    "code": "2000000000062",
+    "product_name": "Greek style yoghurt",
+    "brands": "Example Dairy",
+    "brands_tags": ["example-dairy"],
     "categories_tags": ["en:dairies", "en:yogurts"],
     "ingredients_tags": ["en:milk", "en:cream", "en:ferments"],
     "additives_tags": [],
@@ -103,10 +103,10 @@
     "last_modified_t": 1763500000
   },
   {
-    "code": "8480000987654",
-    "product_name": "Lentejas pardinas",
-    "brands": "Luengo",
-    "brands_tags": ["luengo"],
+    "code": "2000000000079",
+    "product_name": "Brown lentils",
+    "brands": "Example Legumes",
+    "brands_tags": ["example-legumes"],
     "categories_tags": ["en:legumes", "en:lentils"],
     "ingredients_tags": ["en:lentils"],
     "additives_tags": [],
@@ -120,10 +120,10 @@
     "last_modified_t": 1763600000
   },
   {
-    "code": "7622210449283",
-    "product_name": "Chocolate negro 70%",
-    "brands": "Valor",
-    "brands_tags": ["valor"],
+    "code": "2000000000086",
+    "product_name": "Dark chocolate 70%",
+    "brands": "Example Confectionery",
+    "brands_tags": ["example-confectionery"],
     "categories_tags": ["en:snacks", "en:sweet-snacks", "en:dark-chocolates"],
     "ingredients_tags": ["en:cocoa-mass", "en:sugar", "en:cocoa-butter"],
     "additives_tags": ["en:e322"],

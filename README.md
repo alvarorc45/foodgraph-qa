@@ -241,8 +241,16 @@ docs/bug-reports/  defects found in live data, written up and reproducible
 
 | File | What it is | What it answers |
 | --- | --- | --- |
-| `products.json` | curated, clean by construction | does a *good* load pass every check? |
+| `products.json` | hand-written, clean by construction | does a *good* load pass every check? |
 | `recorded_sample.json` | real API payloads, warts and all | does the parser survive what the API *actually* sends? |
+
+`products.json` is written by hand rather than recorded, and it is built to
+look that way. Its barcodes sit in the GS1 restricted-distribution range
+(prefix 2), which is reserved for internal and in-store numbering and never
+identifies a globally registered product, and the names and brands are
+generic. Nutrition figures are typical values for each kind of food, not
+measurements of anything. Nothing in this file is a claim about a real
+product, and nothing in `docs/bug-reports/` rests on it.
 
 Mixing them would break both. If real-world records went into the curated
 set, the suite would go red the moment someone in the Open Food Facts
@@ -272,5 +280,6 @@ Open Food Facts is volunteer-run and asks callers to identify themselves and
 not to hammer it. The client sends a `User-Agent`, honours `Retry-After` and
 rate-limits itself; please keep that if you fork this.
 
-Data from Open Food Facts is available under the
+This code is MIT licensed. Data recorded from Open Food Facts, including
+anything written into `tests/fixtures/recorded_sample.json`, stays under the
 [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/).
